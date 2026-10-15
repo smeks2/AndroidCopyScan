@@ -1,0 +1,29 @@
+package com.jaims.idcopy;
+
+import android.app.*;import android.os.*;import android.content.*;import android.graphics.*;import android.graphics.pdf.PdfDocument;import android.net.Uri;import android.print.*;import android.view.*;import android.widget.*;import java.io.*;
+
+public class MainActivity extends Activity {
+  Bitmap front,back; ImageView preview; TextView trialStatus; EditText title; byte[] pdf; int selecting=0; static final int PICK=1,SAVE=2;
+  LinearLayout root;
+  @Override public void onCreate(Bundle b){super.onCreate(b);root=new LinearLayout(this);root.setOrientation(1);root.setPadding(18,18,18,18);root.setBackgroundColor(Color.rgb(244,247,252));ScrollView sc=new ScrollView(this);sc.addView(root);setContentView(sc);
+    TextView heading=new TextView(this);heading.setText("JAIMS ID Copy  |  Offline");heading.setTextSize(23);heading.setTextColor(Color.rgb(17,40,75));root.addView(heading);
+    title=new EditText(this);title.setSingleLine(true);title.setText("SALINAN KAD PENGENALAN");title.setHint("Title");title.setEnabled(false);root.addView(title);
+    trialStatus=new TextView(this);root.addView(trialStatus);updateTrial();
+    button("1. Pilih gambar DEPAN",()->pick(1));button("2. Pilih gambar BELAKANG",()->pick(2));
+    preview=new ImageView(this);preview.setAdjustViewBounds(true);preview.setMinimumHeight(240);root.addView(preview);
+    button("3. Sedia untuk Print",()->generate());button("Print (Trial)",()->print());
+    TextView info=new TextView(this);info.setText("Imej dipilih dari storan telefon. Tiada muat naik internet. PDF sementara dijana pada peranti. Trial terhad kepada 3 kerja cetakan; sistem Android mungkin menawarkan Save as PDF.");root.addView(info);
+  }
+  void button(String text,Runnable action){Button b=new Button(this);b.setText(text);root.addView(b);b.setOnClickListener(v->action.run());}
+  void pick(int n){selecting=n;Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("image/*");i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,PICK);}
+  @Override protected void onActivityResult(int r,int c,Intent data){super.onActivityResult(r,c,data);if(c!=RESULT_OK||data==null)return;try{if(r==PICK){BitmapFactory.Options opt=new BitmapFactory.Options();opt.inSampleSize=2;Bitmap bitmap=BitmapFactory.decodeStream(getContentResolver().openInputStream(data.getData()),null,opt);if(bitmap==null)throw new Exception("Imej tidak boleh dibaca");if(selecting==1)front=bitmap;else back=bitmap;preview.setImageBitmap(bitmap);pdf=null;}else if(r==SAVE&&pdf!=null){try(OutputStream out=getContentResolver().openOutputStream(data.getData())){out.write(pdf);}toast("PDF disimpan");}}catch(Exception e){toast(e.getMessage());}}
+  void generate(){if(front==null||back==null){toast("Pilih gambar depan dan belakang dahulu");return;}try{PdfDocument doc=new PdfDocument();PdfDocument.PageInfo pi=new PdfDocument.PageInfo.Builder(595,842,1).create();PdfDocument.Page p=doc.startPage(pi);Canvas c=p.getCanvas();c.drawColor(Color.WHITE);Paint t=new Paint(3);t.setColor(Color.rgb(17,40,75));t.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));t.setTextSize(17);drawCenter(c,title.getText().toString(),297,55,t);drawCard(c,front,110,105,375,236);drawCard(c,back,110,410,375,236);t.setTextSize(10);t.setColor(Color.DKGRAY);drawCenter(c,"Dijana menggunakan JAIMS ID Copy",297,790,t);doc.finishPage(p);ByteArrayOutputStream out=new ByteArrayOutputStream();doc.writeTo(out);pdf=out.toByteArray();doc.close();toast("Dokumen A4 siap. Tekan Print.");}catch(Exception e){toast(e.toString());}}
+  void drawCard(Canvas c,Bitmap b,int x,int y,int w,int h){Paint p=new Paint(3);p.setFilterBitmap(true);c.drawBitmap(b,null,new Rect(x,y,x+w,y+h),p);}
+  void drawCenter(Canvas c,String s,float x,float y,Paint p){c.drawText(s,x-p.measureText(s)/2,y,p);}
+  void save(){if(pdf==null){toast("Jana PDF dahulu");return;}Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.setType("application/pdf");i.addCategory(Intent.CATEGORY_OPENABLE);i.putExtra(Intent.EXTRA_TITLE,"JAIMS_ID_Copy.pdf");startActivityForResult(i,SAVE);}
+  void print(){if(getUsed()>=3){toast("3 percubaan telah digunakan. Pro belum tersedia dalam binaan ujian ini.");return;}if(pdf==null){toast("Jana PDF dahulu");return;}PrintManager pm=(PrintManager)getSystemService(PRINT_SERVICE);pm.print("JAIMS ID Copy",new PrintDocumentAdapter(){@Override public void onLayout(PrintAttributes o,PrintAttributes n,CancellationSignal cs,LayoutResultCallback cb,Bundle extras){cb.onLayoutFinished(new PrintDocumentInfo.Builder("JAIMS_ID_Copy.pdf").setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT).setPageCount(1).build(),true);}@Override public void onWrite(PageRange[] pages,android.os.ParcelFileDescriptor fd,CancellationSignal cs,WriteResultCallback cb){try(FileOutputStream o=new FileOutputStream(fd.getFileDescriptor())){o.write(pdf);cb.onWriteFinished(new PageRange[]{PageRange.ALL_PAGES});}catch(Exception e){cb.onWriteFailed(e.toString());}}},null);getPreferences(MODE_PRIVATE).edit().putInt("print_used",getUsed()+1).apply();updateTrial();}
+  int getUsed(){return getPreferences(MODE_PRIVATE).getInt("print_used",0);}
+  void updateTrial(){if(trialStatus!=null)trialStatus.setText("FREE TRIAL: "+Math.max(0,3-getUsed())+" daripada 3 kerja cetakan berbaki");}
+  void share(){if(pdf==null){toast("Jana PDF dahulu");return;}try{File f=new File(getCacheDir(),"JAIMS_ID_Copy.pdf");try(FileOutputStream o=new FileOutputStream(f)){o.write(pdf);}Uri u=androidx.core.content.FileProvider.getUriForFile(this,getPackageName()+".provider",f);Intent i=new Intent(Intent.ACTION_SEND);i.setType("application/pdf");i.putExtra(Intent.EXTRA_STREAM,u);i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivity(Intent.createChooser(i,"Share JAIMS PDF"));}catch(Exception e){toast(e.toString());}}
+  void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
+}
